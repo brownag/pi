@@ -248,6 +248,65 @@ describe("AgentSession compaction characterization", () => {
 		);
 	});
 
+	it("strips silent overflow assistant message (stopReason=stop) during retry", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		const model = harness.getModel();
+		const contextWindow = model.contextWindow ?? 200_000;
+
+		const silentOverflowMessage = createAssistant(harness, {
+			stopReason: "stop",
+			totalTokens: contextWindow + 10_000,
+			timestamp: Date.now(),
+		});
+
+		harness.session.agent.state.messages = [
+			{ role: "user", content: [{ type: "text", text: "hello" }], timestamp: Date.now() - 1000 },
+			silentOverflowMessage,
+		];
+
+		useSummaryStreamFn(harness, "compacted summary");
+
+		await sessionInternals._checkCompaction(silentOverflowMessage);
+
+		const lastMsg = harness.session.agent.state.messages[harness.session.agent.state.messages.length - 1];
+		expect(lastMsg.role).not.toBe("assistant");
+	});
+
+	it("strips length-stop overflow assistant message (stopReason=length) during retry", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		const sessionInternals = harness.session as unknown as SessionWithCompactionInternals;
+		const model = harness.getModel();
+		const contextWindow = model.contextWindow ?? 200_000;
+
+		const lengthStopOverflowMessage = createAssistant(harness, {
+			stopReason: "length",
+			timestamp: Date.now(),
+		});
+		lengthStopOverflowMessage.usage = {
+			input: Math.ceil(contextWindow * 0.99),
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: Math.ceil(contextWindow * 0.99),
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		};
+
+		harness.session.agent.state.messages = [
+			{ role: "user", content: [{ type: "text", text: "hello" }], timestamp: Date.now() - 1000 },
+			lengthStopOverflowMessage,
+		];
+
+		useSummaryStreamFn(harness, "compacted summary");
+
+		await sessionInternals._checkCompaction(lengthStopOverflowMessage);
+
+		const lastMsg = harness.session.agent.state.messages[harness.session.agent.state.messages.length - 1];
+		expect(lastMsg.role).not.toBe("assistant");
+	});
+
 	it("ignores stale pre-compaction assistant usage on pre-prompt checks", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);

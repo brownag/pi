@@ -2028,7 +2028,7 @@ export class AgentSession {
 			if (willRetry) {
 				const messages = this.agent.state.messages;
 				const lastMsg = messages[messages.length - 1];
-				if (lastMsg?.role === "assistant" && (lastMsg as AssistantMessage).stopReason === "error") {
+				if (lastMsg?.role === "assistant") {
 					this.agent.state.messages = messages.slice(0, -1);
 				}
 				return true;
